@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/gcc",
+            "cStandard": "c89",
+            "cppStandard": "gnu++98",
+            "intelliSenseMode": "linux-gcc-x64"
+        },
+        {
+            "name": "Linux-4.0.28-py3",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/include/**"
+            ],
+            "defines": [],
+            "compilerPath": "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/bin/x86_64-conda-linux-gnu-g++",
+            "cStandard": "c17",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}

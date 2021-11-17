@@ -1,0 +1,33 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "shell",
+            "label": "build active file wiyh ps-4.5.7",
+            "command": "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/bin/x86_64-conda-linux-gnu-g++",
+            "args": [
+                "--std=c++11",
+                "-I/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/include/python3.7m/",
+                "-I/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/include/",
+                "-L/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/lib/",
+                "-g",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}",
+                "-lpython3.7m",
+                "-lzmq",
+                "-lpthread"
+            ],
+            "options": {
+                "cwd": "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/bin"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
