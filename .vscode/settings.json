@@ -1,4 +1,8 @@
 {
+    "python.formatting.blackPath": "/cds/home/v/valmar/.local/bin/black",
+    "python.linting.flake8Path": "/cds/home/v/valmar/.local/bin/flake8",
+    "python.linting.mypyPath": "/cds/home/v/valmar/.local/bin/mypy",
+    "python.linting.pycodestylePath": "/cds/home/v/valmar/.local/bin/pycodestyle",
     "files.associations": {
         "sstream": "cpp",
         "cctype": "cpp",
@@ -68,5 +72,8 @@
         "numbers": "cpp",
         "semaphore": "cpp",
         "stop_token": "cpp"
-    }
+    },
+    "cSpell.words": [
+        "drpsocket"
+    ]
 }
