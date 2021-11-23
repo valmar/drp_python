@@ -69,39 +69,41 @@ int start_server_client(zmq::context_t *zmq_context, int thread_num, char *argv[
         close(pipefd_stdout[1]);
         close(pipefd_stderr[1]);
 
-        std::cout << "Starting C++ server " << thread_num << std::endl;
+        std::cout << "Starting C++ side (thread " << thread_num <<")" << std::endl;
         zmq::socket_t socket(*zmq_context, zmq::socket_type::pair);
 
         std::stringstream socket_name;
-        std::cout << "Connecting to ipc:///tmp/drpsocket" << thread_num << std::endl;
+        std::cout << "Connecting to ipc:///tmp/drpsocket" << thread_num 
+                  << " on the C++ side (thread " << thread_num <<")" << std::endl;
         socket_name << "ipc:///tmp/drpsocket" << thread_num;
         socket.bind(socket_name.str().c_str());
-        std::cout << "Connected" << std::endl;
+        std::cout << "Connected on the C++ side (thread " << thread_num <<")"
+                  << std::endl;
 
         read_pipe_to_end(pipefd_stdout[0], thread_num);
         read_pipe_to_end(pipefd_stderr[0], thread_num);
 
-        std::cout << "Waiting for messages...." << std::endl;
         for (int i = 0; i < 10; i++)
         {
-            zmq::message_t request;
+            zmq::message_t request("Hello", 5);
 
-            socket.recv(request, zmq::recv_flags::none);
-            std::cout << "Test " << i << ": Received Hello from client "
-                      << thread_num << std::endl;
+            std::cout << "Test " << i << ": Sending request to python "
+                      << "(thread " << thread_num << ")" << std::endl;
 
-            sleep(1);
+            auto res_send = socket.send(request, zmq::send_flags::none);
 
-            zmq::message_t reply(5);
-            std::cout << "Test " << i << ": Replying to client "
-                      << thread_num << std::endl;
-            memcpy(reply.data(), "World", 5);
-            socket.send(reply, zmq::send_flags::none);
+            std::cout << "Test " << i << ": Waiting for answer from python "
+                      << "(thread " << thread_num << ")" << std::endl;
             
+            zmq::message_t reply(5);
+            auto res_recv = socket.recv(reply, zmq::recv_flags::none);
+
+            std::cout << "Test " << i << ": Received reply from  python "
+                      << "(thread " << thread_num << ")" << std::endl;
+
             read_pipe_to_end(pipefd_stdout[0], thread_num);
             read_pipe_to_end(pipefd_stderr[0], thread_num);
         }
-
 
         int status;
         pid_t wait_pid = waitpid(child_pid, &status, 0);
