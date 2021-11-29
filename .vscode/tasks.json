@@ -15,8 +15,8 @@
                 "${file}",
                 "-o",
                 "${fileDirname}/${fileBasenameNoExtension}",
-                "-lpython3.7m",
                 "-lzmq",
+                "-lrt",
                 "-lpthread"
             ],
             "options": {
