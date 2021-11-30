@@ -19,14 +19,12 @@ sh compile.sh
 
 ### To run:
 
+```
 conda activate ps-4.5.7
 ./drp_test ./drp_python.py
-
+```
 
 ### Notes:
-
-
-  ```
 
 
 * To list "leftover" IPC structures
