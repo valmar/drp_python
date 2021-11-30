@@ -74,6 +74,8 @@
         "stop_token": "cpp"
     },
     "cSpell.words": [
-        "drpsocket"
+        "drpsocket",
+        "ftok",
+        "sysv"
     ]
 }

@@ -4,21 +4,44 @@
 #include <sstream>
 #include <thread>
 #include <stdio.h>
-#include <string.h>
 #include <fcntl.h>
 #include <errno.h>
-
-#include <mqueue.h>
+#include <cstring>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <sys/msg.h>
 #include <sys/wait.h>
-#include <sys/mman.h>
+
+
+int mq_sc_id[2];
+int mq_cs_id[2];
+int shm_sc_id[2];
+int shm_cs_id[2];
+
+
+
+void exit_gracefully( int signum ) {
+   std::cout << "Interrupt signal (" << signum << ") received. Cleaning up!\n";
+
+   msgctl(mq_sc_id[0], IPC_RMID, NULL);
+   msgctl(mq_cs_id[0], IPC_RMID, NULL);
+   msgctl(mq_sc_id[1], IPC_RMID, NULL);
+   msgctl(mq_cs_id[1], IPC_RMID, NULL);
+   shmctl(shm_sc_id[0], IPC_RMID, NULL);
+   shmctl(shm_cs_id[0], IPC_RMID, NULL);
+   shmctl(shm_sc_id[1], IPC_RMID, NULL);
+   shmctl(shm_cs_id[1], IPC_RMID, NULL);
+  
+   exit(signum);  
+}
 
 
 float sum_array(float *data_array) {
     float sum = 0.0;
     for (int i=0; i<100*100; i++) {
         if (data_array[i] != 0.0 && data_array[i] != 1.0) {
-            std::cerr << "Warning: an element has a value that is not 0.0 or 1.0"
-                      << std::endl;
+            std::cerr << "Warning: an element has a value that is not 0.0 or 1.0: "
+                      << data_array[i] << std::endl;
         }
         sum += data_array[i];
     }
@@ -62,24 +85,31 @@ void read_pipe_to_the_end(int pipe, int thread_num)
 
 int start_server_client(int thread_num, char *argv[])
 {
-    int pipefd_stdout[2], pipefd_stderr[2];
+    // Set up pipes for communication with sub processes
 
+    int pipefd_stdout[2], pipefd_stderr[2];
     if (pipe(pipefd_stdout) == -1 || pipe(pipefd_stderr) == -1)
     {
         std::cerr << "Fatal error: error creating stdout pipe" << std::endl;
         return 1;
     }
 
-    pid_t child_pid = fork();
+    // Fork
 
+    pid_t child_pid = fork();
+    
     if (child_pid == pid_t(0))
     {
+        // Set up pipes in child process
+
         // dup2(pipefd_stdout[1],1);
         // dup2(pipefd_stderr[1],2);
         // close(pipefd_stdout[0]);
         // close(pipefd_stdout[1]);
         // close(pipefd_stderr[0]);
         // close(pipefd_stderr[1]);
+
+        // Executing external code
 
         int ret_exec = execlp(
             "python",
@@ -93,139 +123,173 @@ int start_server_client(int thread_num, char *argv[])
     else
     {
         std::cout << "Starting C++ side (thread " << thread_num << ")" << std::endl;
-        
+
+        // Set up pipes in parent process
+
         // close(pipefd_stdout[1]);
         // close(pipefd_stderr[1]);
 
-        std::stringstream mq_key_str_cs;
-        std::stringstream mq_key_str_sc;
-        mq_key_str_cs <<
-            "/mq" <<
-            thread_num <<
-            "cs";
-        mq_key_str_sc <<
-            "/mq" <<
-            thread_num <<
-            "sc";
-        std::string mq_key_cs = mq_key_str_cs.str();
-        std::string mq_key_sc = mq_key_str_sc.str();
+        // Creating message queues
+
         std::cout << "Creating message queues (thread " << thread_num << ")"
                   << std::endl;
-
-        mq_attr attrs;
-        attrs.mq_flags = 0;
-        attrs.mq_maxmsg = 1;
-        attrs.mq_msgsize = 3;
-        attrs.mq_curmsgs = 0;
-        
-        mqd_t mq_sc = mq_open(
-            mq_key_sc.c_str(),
-            (O_CREAT | O_WRONLY),
-            0664,
-            &attrs
-        );
-        if ( mq_sc == -1 ) {
+        mq_sc_id[thread_num] = msgget(200000 + (10000 * thread_num), IPC_CREAT | 0666);
+        if ( mq_sc_id[thread_num] == -1 ) {
             std::cerr << "Error in creating server-client message queue (thread "
                       << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);                      
             return 1;
         }
-        
-        mqd_t mq_cs = mq_open(
-            mq_key_cs.c_str(),
-            (O_CREAT | O_RDONLY),
-            0664,
-            &attrs
-        );
-        if ( mq_cs == -1 ) {
+        mq_cs_id[thread_num] = msgget(200001 + (10000 * thread_num), IPC_CREAT | 0666);
+        if ( mq_cs_id[thread_num] == -1 ) {
             std::cerr << "Error in creating client-server message queue (thread "
                       << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);  
+            msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
             return 1;
         }
-        std::cout << "Message queue created (thread " << thread_num << ")"
+
+        std::cout << "Message queues created (thread " << thread_num << ")"
                   << std::endl;
 
-        std::stringstream shm_key_str_s;
-        std::stringstream shm_key_str_c;
-        shm_key_str_s << "/shm" << thread_num << "s";
-        shm_key_str_c << "/shm" << thread_num << "c";
-        std::string shm_key_s = shm_key_str_s.str();
-        std::string shm_key_c = shm_key_str_c.str();
+        // // Creating shared memory
+
         std::cout << "Creating shared memory blocks (thread " << thread_num << ")" <<
                      std::endl;
 
-        int shm_fd_s = shm_open(shm_key_s.c_str(), O_CREAT | O_RDWR, 0666);
-        if ( shm_fd_s == -1 ) {
-            std::cerr << "Error in creating server's shared memory (thread "
+        shm_sc_id[thread_num] = shmget(
+            200002 + (10000 * thread_num),
+            sizeof(float)*100*100,
+            IPC_CREAT | IPC_EXCL | 0666
+        );
+        if ( shm_sc_id[thread_num] == -1 ) {
+            std::cerr << "Error in creating server-client shared memory (thread "
                       << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);                      
+            msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+            msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
             return 1;
         }
-        ftruncate(shm_fd_s, sizeof(float)*100*100);
-        void *shm_s_ptr = mmap(NULL, sizeof(float)*100*100, PROT_WRITE, MAP_SHARED,
-                          shm_fd_s, 0);
-        std::cout << "Server's shared memory created  (thread " << thread_num
-                  << ")" << std::endl;
-   
-        int shm_fd_c = shm_open(shm_key_c.c_str(), O_CREAT | O_RDWR, 0666);
-        if ( shm_fd_c == -1 ) {
-            std::cerr << "Error in creating client's shared memory (thread "
+        float *data_array_sc = (float*)shmat(shm_sc_id[thread_num], NULL, 0);
+        if ( data_array_sc == (void*)-1 ) {
+            std::cerr << "Error attaching server-client shared memory (thread "
                       << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);                      
+            msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+            msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
             return 1;
         }
-        ftruncate(shm_fd_c, sizeof(float)*100*100);
-        void *shm_c_ptr = mmap(NULL, sizeof(float)*100*100, PROT_READ, MAP_SHARED,
-                          shm_fd_c, 0);
-        std::cout << "Client's shared memory created  (thread " << thread_num
+
+        std::cout << "Server-client shared memory created  (thread " << thread_num
                   << ")" << std::endl;
 
-        float *data_array_s = (float*)shm_s_ptr;
-        float *data_array_c = (float*)shm_c_ptr;
-
-        for (int i = 0; i<100*100; i++) {
-            data_array_s[i] = 0;
+        shm_cs_id[thread_num] = shmget(
+            200003 + (10000 * thread_num),
+            sizeof(float)*100*100,
+            IPC_CREAT | IPC_EXCL| 0666
+        );
+        if ( shm_cs_id[thread_num] == -1 ) {
+            std::cerr << "Error in creating client-server shared memory (thread "
+                      << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);                      
+            msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+            msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
+            shmdt(data_array_sc);
+            shmctl(shm_sc_id[thread_num], IPC_RMID, NULL);
+            return 1;
+        }
+        float *data_array_cs = (float*)shmat(shm_cs_id[thread_num], NULL, 0);
+        if ( data_array_sc == (void*)-1 ) {
+            std::cerr << "Error in attaching client-server shared memory (thread "
+                      << thread_num << ")" << " - Errno: " << errno << std::endl;
+            kill(child_pid, SIGTERM);                      
+            msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+            msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
+            shmdt(data_array_sc);
+            shmctl(shm_sc_id[thread_num], IPC_RMID, NULL);
+            return 1;
         }
 
-        char message[3];    
+        std::cout << "Client-server shared memory created  (thread " << thread_num
+                  << ")" << std::endl;
+
+        // Initializing message arrays
+
+        int go_msg[1];
+        int recv_msg[1];
+        go_msg[0] = 1;   
         for (int i = 0; i < 100*100; i++)
         {
+            // Send message to python side
 
             std::cout << "Test " << i << ": Sending request to python "
                       << "(thread " << thread_num << ")" << std::endl;
 
-            int res_send = mq_send(mq_sc, "go", 3, 1);
-            if ( res_send == -1 ) {
+            int ret_send = msgsnd(mq_sc_id[thread_num], &go_msg, sizeof(go_msg), 0);
+            if ( ret_send == -1 ) {
                 std::cerr << "Error sending message (thread " << thread_num << ")"
                           << " - Errno: " << errno << std::endl;
+                kill(child_pid, SIGTERM);                      
+                msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+                msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
+                shmdt(data_array_sc);
+                shmdt(data_array_cs);
+                shmctl(shm_sc_id[thread_num], IPC_RMID, NULL);
+                shmctl(shm_cs_id[thread_num], IPC_RMID, NULL);
                 return 1;
             }
 
-            std::cout << "Test " << i << ": Waiting for answer from python "
-                      << "(thread " << thread_num << ")" << std::endl;
+            // Receive message from python side
 
-            int ret_receive = mq_receive(mq_cs, message, 3, NULL);
+            int ret_receive = msgrcv(mq_cs_id[thread_num], &recv_msg, sizeof(recv_msg), 0, 0);
             if ( ret_receive == -1 ) {
                 std::cerr << "Error receiving message (thread " << thread_num << ")"
                           << std::endl;   
+                kill(child_pid, SIGTERM);                      
+                msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+                msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
+                shmdt(data_array_sc);
+                shmdt(data_array_cs);
+                shmctl(shm_sc_id[thread_num], IPC_RMID, NULL);
+                shmctl(shm_cs_id[thread_num], IPC_RMID, NULL);
                 return 1;
             }
             std::cout << "Test " << i << ": Received reply from  python "
                       << "(thread " << thread_num << ")" << std::endl;
 
-            memcpy(data_array_s, data_array_c, sizeof(float)*100*100);
+            // Copy array from client to server shared memory
+
+            memcpy(data_array_sc, data_array_cs, sizeof(float)*100*100);
+
+            // Update array and print sum
+
             if ( i % 2 == 0) {
-                data_array_s[i] += 1.0;
+                data_array_sc[i] += 1.0;
             }
 
             std::cout << "Test " << i << ": Current array sum: "
-                      << sum_array(data_array_s)
+                      << sum_array(data_array_sc)
                       << "(thread " << thread_num << ")" << std::endl;
+
+            if (sum_array(data_array_cs) == 10000.0) {
+                std::cerr << "Test " << i << ": Current array sum: "
+                        << sum_array(data_array_sc)
+                        << "(thread " << thread_num << ")" << std::endl;
+            }
+
         }
 
-        mq_close(mq_cs);
-        mq_close(mq_sc);
-        mq_unlink(mq_key_str_cs.str().c_str());
-        mq_unlink(mq_key_str_sc.str().c_str());
-        shm_unlink(shm_key_str_c.str().c_str());
-        shm_unlink(shm_key_str_s.str().c_str());
+        // Shut down thread
+
+        std::cout << "Stopping C++ side "
+                  << "(thread " << thread_num << ")" << std::endl;
+
+        msgctl(mq_sc_id[thread_num], IPC_RMID, NULL);
+        msgctl(mq_cs_id[thread_num], IPC_RMID, NULL);
+        shmdt(data_array_sc);
+        shmdt(data_array_cs);
+        shmctl(shm_sc_id[thread_num], IPC_RMID, NULL);
+        shmctl(shm_cs_id[thread_num], IPC_RMID, NULL);
 
         int status;
         pid_t wait_pid = waitpid(child_pid, &status, 0);
@@ -242,6 +306,9 @@ int start_server_client(int thread_num, char *argv[])
 
 int main(int argc, char *argv[])
 {
+
+    signal(SIGINT, exit_gracefully);
+
     if (argc != 2)
     {
         printf("Usage: drp_test <python file>\n");
