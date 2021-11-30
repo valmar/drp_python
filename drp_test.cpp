@@ -269,14 +269,13 @@ int start_server_client(int thread_num, char *argv[])
             std::cout << "Test " << i << ": Current array sum: "
                       << sum_array(data_array_sc)
                       << "(thread " << thread_num << ")" << std::endl;
-
-            if (sum_array(data_array_cs) == 10000.0) {
-                std::cerr << "Test " << i << ": Current array sum: "
-                        << sum_array(data_array_sc)
-                        << "(thread " << thread_num << ")" << std::endl;
-            }
-
         }
+
+        // Print final sum to stderr
+
+        std::cerr << "Final array sum: "
+                << sum_array(data_array_sc)
+                << "(thread " << thread_num << ")" << std::endl;
 
         // Shut down thread
 
