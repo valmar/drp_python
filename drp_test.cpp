@@ -114,7 +114,6 @@ int start_server_client(int thread_num, char *argv[])
         int ret_exec = execlp(
             "python",
             "python",
-            "-u",
             argv[1],
             std::to_string(thread_num).c_str(),
             NULL);
