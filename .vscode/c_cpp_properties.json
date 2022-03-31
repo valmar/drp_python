@@ -12,13 +12,14 @@
             "intelliSenseMode": "linux-gcc-x64"
         },
         {
-            "name": "Linux-4.0.28-py3",
+            "name": "LCLS2-Local",
             "includePath": [
                 "${workspaceFolder}/**",
-                "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/include/**"
+                "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.11/include/**",
+                "/cds/home/v/valmar/Projects/LCLS2/lcls2/install/include/**"
             ],
             "defines": [],
-            "compilerPath": "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.7/bin/x86_64-conda-linux-gnu-g++",
+            "compilerPath": "/cds/sw/ds/ana/conda2/inst/envs/ps-4.5.11/bin/x86_64-conda-linux-gnu-g++",
             "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "linux-gcc-x64"

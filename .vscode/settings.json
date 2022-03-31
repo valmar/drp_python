@@ -74,8 +74,13 @@
         "stop_token": "cpp"
     },
     "cSpell.words": [
+        "dgram",
         "drpsocket",
         "ftok",
-        "sysv"
-    ]
+        "psana",
+        "psdm",
+        "sysv",
+        "tmox"
+    ],
+    "C_Cpp.default.compilerPath": "${env:CXX}"
 }
