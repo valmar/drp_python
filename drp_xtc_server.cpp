@@ -356,47 +356,58 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    while (stop_received != 1) {
 
-        ret_receive = msgrcv(mq_send_id, &received_message_content,
-                                  sizeof(received_message_content.message_text),
-                                  0, 0);
-        if (ret_receive == -1)
-        {
-            std::cerr << "[C++] Error receiving message" << std::endl;
-            msgctl(mq_recv_id, IPC_RMID, NULL);
-            msgctl(mq_send_id, IPC_RMID, NULL);
-            shmdt(data_array_sc);
-            shmdt(data_array_cs);
-            shmctl(shm_recv_id, IPC_RMID, NULL);
-            shmctl(shm_send_id, IPC_RMID, NULL);
-            free(shm_recv_buf);
-            free(shm_send_buf);
-            return 0;
-         }
+    ret_receive = msgrcv(mq_send_id, &received_message_content,
+                         sizeof(received_message_content.message_text),
+                         0, 0);
+    if (ret_receive == -1)
+    {
+        std::cerr << "[C++] Error receiving message" << std::endl;
+        msgctl(mq_recv_id, IPC_RMID, NULL);
+        msgctl(mq_send_id, IPC_RMID, NULL);
+        shmdt(data_array_sc);
+        shmdt(data_array_cs);
+        shmctl(shm_recv_id, IPC_RMID, NULL);
+        shmctl(shm_send_id, IPC_RMID, NULL);
+        free(shm_recv_buf);
+        free(shm_send_buf);
+        return 0;
+     }
          
-	 if (strncmp(received_message_content.message_text, "s", 1) == 0) {
-              stop_received = 1;
-	 } else {
-              ret_send = msgsnd(mq_recv_id, &message_content,
-                                sizeof(message_content.message_text), 0);
-              if (ret_send == -1)
-              { 
-                  std::cerr << "Error sending message"
-                            << " - Errno: " << errno << std::endl;
-                  msgctl(mq_recv_id, IPC_RMID, NULL);
-                  msgctl(mq_send_id, IPC_RMID, NULL);
-                  shmdt(data_array_sc);
-                  shmdt(data_array_cs);
-                  shmctl(shm_recv_id, IPC_RMID, NULL);
-                  shmctl(shm_send_id, IPC_RMID, NULL);
-                  free(shm_recv_buf);
-                  free(shm_send_buf);
-                  return 0;
-              }
-	 }     
-    }
+     ret_send = msgsnd(mq_recv_id, &message_content,
+                       sizeof(message_content.message_text), 0);
+     if (ret_send == -1)
+     { 
+         std::cerr << "Error sending message"
+                   << " - Errno: " << errno << std::endl;
+         msgctl(mq_recv_id, IPC_RMID, NULL);
+         msgctl(mq_send_id, IPC_RMID, NULL);
+         shmdt(data_array_sc);
+         shmdt(data_array_cs);
+         shmctl(shm_recv_id, IPC_RMID, NULL);
+         shmctl(shm_send_id, IPC_RMID, NULL);
+         free(shm_recv_buf);
+         free(shm_send_buf);
+         return 0;
+     }
 
+    ret_receive = msgrcv(mq_send_id, &received_message_content,
+                         sizeof(received_message_content.message_text),
+                         0, 0);
+    if (ret_receive == -1)
+    {
+        std::cerr << "[C++] Error receiving message" << std::endl;
+        msgctl(mq_recv_id, IPC_RMID, NULL);
+        msgctl(mq_send_id, IPC_RMID, NULL);
+        shmdt(data_array_sc);
+        shmdt(data_array_cs);
+        shmctl(shm_recv_id, IPC_RMID, NULL);
+        shmctl(shm_send_id, IPC_RMID, NULL);
+        free(shm_recv_buf);
+        free(shm_send_buf);
+        return 0;
+    }
+    
     // Shut down thread
 
     std::cout << "Stopping C++ side " << std::endl;
