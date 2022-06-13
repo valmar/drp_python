@@ -25,7 +25,7 @@ void *shm_send_buf;
 
 void exit_gracefully(int signum)
 {
-    std::cout << "[C++] Interrupt signal (" << signum << ") received. Cleaning up!\n";
+    std::cout << "Interrupt signal (" << signum << ") received. Cleaning up!\n";
 
     msgctl(mq_recv_id, IPC_RMID, NULL);
     msgctl(mq_send_id, IPC_RMID, NULL);
@@ -51,8 +51,20 @@ int main(int argc, char *argv[])
     //     exit(1);
     // }
 
-    std::string xtc_filename = "/cds/data/psdm/tmo/tmox49720/xtc/smalldata/"
-                               "tmox49720-r0206-s000-c000.smd.xtc2";
+    std::string xtc_filename = "/cds/data/psdm/tmo/tmox49720/xtc/"
+                               "tmox49720-r0206-s003-c000.xtc2";
+
+    std::string output_filename = "./drp_test.xtc2";
+
+    int ofd = open(
+        output_filename.c_str(),
+        O_WRONLY | O_CREAT,
+        S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH);
+    if (ofd < 0)
+    {
+        std::cerr << "Unable to open file " << output_filename << std::endl;
+        exit(2);
+    }
 
     std::cout << "Starting C++ server" << std::endl;
 
@@ -82,7 +94,7 @@ int main(int argc, char *argv[])
     std::cout << "Creating shared memory blocks" << std::endl;
 
     unsigned pageSize = (unsigned)sysconf(_SC_PAGESIZE);
-    size_t sizeofShm = 128000;
+    size_t sizeofShm = 3000000;
     unsigned remainder = sizeofShm % pageSize;
     if (remainder != 0)
     {
@@ -101,7 +113,7 @@ int main(int argc, char *argv[])
     shm_recv_buf = buffer_sc;
     shm_recv_id = shmget(
         200002,
-        128000,
+        sizeofShm,
         IPC_CREAT | IPC_EXCL | 0666);
     if (shm_recv_id == -1)
     {
@@ -139,7 +151,7 @@ int main(int argc, char *argv[])
     shm_send_buf = buffer_cs;
     shm_send_id = shmget(
         200003,
-        128000,
+        sizeofShm,
         IPC_CREAT | IPC_EXCL | 0666);
     if (shm_send_id == -1)
     {
@@ -198,12 +210,32 @@ int main(int argc, char *argv[])
     message_struct received_message_content;
 
     unsigned num_event = 0;
-    unsigned num_required_events = 100;
+    unsigned num_required_events = 10;
+
+    std::cout << "Waiting for the python interpreter to start" << std::endl;
+    int ret_receive = 1;
+    ret_receive = msgrcv(mq_send_id, &received_message_content,
+                         sizeof(received_message_content.message_text),
+                         0, 0);
+    if (ret_receive == -1)
+    {
+        std::cerr << "[C++] Error receiving message" << std::endl;
+        msgctl(mq_recv_id, IPC_RMID, NULL);
+        msgctl(mq_send_id, IPC_RMID, NULL);
+        shmdt(data_array_sc);
+        shmdt(data_array_cs);
+        shmctl(shm_recv_id, IPC_RMID, NULL);
+        shmctl(shm_send_id, IPC_RMID, NULL);
+        free(shm_recv_buf);
+        free(shm_send_buf);
+        return 0;
+    }
+
     while ((dg = iter.next()))
     {
-
-        if (num_event >= num_required_events)
+        if (num_event >= num_required_events) {
             break;
+        }
         num_event++;
         size_t dgram_size = sizeof(*dg) + dg->xtc.sizeofPayload();
 
@@ -252,7 +284,7 @@ int main(int argc, char *argv[])
             return 0;
         }
 
-        int ret_receive = -1;
+        ret_receive = -1;
         ret_receive = msgrcv(mq_send_id, &received_message_content,
                              sizeof(received_message_content.message_text),
                              0, 0);
@@ -269,9 +301,42 @@ int main(int argc, char *argv[])
             free(shm_send_buf);
             return 0;
         }
+
+        if (received_message_content.message_text[0] == 'c')
+        {
+            continue;
+        }
+
+        XtcData::Dgram *out_dg = (XtcData::Dgram *)shm_send_buf;
+        std::cout << "Received modified event: "
+                  << XtcData::TransitionId::name(out_dg->service()) << " - Timestamp: "
+                  << " transition: time " << out_dg->time.seconds()
+                  << "." << std::setfill('0') << std::setw(9)
+                  << out_dg->time.nanoseconds() << " - Datagram size: "
+                  << sizeof(*out_dg) + out_dg->xtc.sizeofPayload()
+                  << std::endl;
+
+        if (write(ofd, out_dg, sizeof(*out_dg) + out_dg->xtc.sizeofPayload()) < 0)
+        {
+            std::cerr << "Error writing to output xtc file." << std::endl;
+            msgctl(mq_recv_id, IPC_RMID, NULL);
+            msgctl(mq_send_id, IPC_RMID, NULL);
+            shmdt(data_array_sc);
+            shmdt(data_array_cs);
+            shmctl(shm_recv_id, IPC_RMID, NULL);
+            shmctl(shm_send_id, IPC_RMID, NULL);
+            free(shm_recv_buf);
+            free(shm_send_buf);
+            return 0;
+        }
+
+        if (num_event > 21) {
+            break;
+        }
     }
 
     std::cout << "Closed " << xtc_filename << " file" << std::endl;
+    close(ofd);
 
     message_content.message_text[0] = 's';
     int ret_send = msgsnd(mq_recv_id, &message_content,
@@ -289,6 +354,47 @@ int main(int argc, char *argv[])
         free(shm_recv_buf);
         free(shm_send_buf);
         return 0;
+    }
+
+    while (stop_received != 1) {
+
+        ret_receive = msgrcv(mq_send_id, &received_message_content,
+                                  sizeof(received_message_content.message_text),
+                                  0, 0);
+        if (ret_receive == -1)
+        {
+            std::cerr << "[C++] Error receiving message" << std::endl;
+            msgctl(mq_recv_id, IPC_RMID, NULL);
+            msgctl(mq_send_id, IPC_RMID, NULL);
+            shmdt(data_array_sc);
+            shmdt(data_array_cs);
+            shmctl(shm_recv_id, IPC_RMID, NULL);
+            shmctl(shm_send_id, IPC_RMID, NULL);
+            free(shm_recv_buf);
+            free(shm_send_buf);
+            return 0;
+         }
+         
+	 if (strncmp(received_message_content.message_text, "s", 1) == 0) {
+              stop_received = 1;
+	 } else {
+              ret_send = msgsnd(mq_recv_id, &message_content,
+                                sizeof(message_content.message_text), 0);
+              if (ret_send == -1)
+              { 
+                  std::cerr << "Error sending message"
+                            << " - Errno: " << errno << std::endl;
+                  msgctl(mq_recv_id, IPC_RMID, NULL);
+                  msgctl(mq_send_id, IPC_RMID, NULL);
+                  shmdt(data_array_sc);
+                  shmdt(data_array_cs);
+                  shmctl(shm_recv_id, IPC_RMID, NULL);
+                  shmctl(shm_send_id, IPC_RMID, NULL);
+                  free(shm_recv_buf);
+                  free(shm_send_buf);
+                  return 0;
+              }
+	 }     
     }
 
     // Shut down thread
